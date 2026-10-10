@@ -1,0 +1,1765 @@
+--[[
+    🍪 OREO HUB v16 🍪
+    - FIX camera đứng yên khi đi (bỏ lock position)
+    - FIX camera rung (nhiều lớp reset + property hook)
+    - THÊM FOV circle trên màn hình + slider Max Distance
+--]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local camera = workspace.CurrentCamera
+
+local old = playerGui:FindFirstChild("OreoHub")
+if old then old:Destroy() end
+
+local userId = player.UserId
+local displayName = player.DisplayName
+local username = player.Name
+local gameName = game.Name or "Unknown"
+pcall(function()
+    local info = MarketplaceService:GetProductInfo(game.PlaceId)
+    if info and info.Name then gameName = info.Name end
+end)
+
+local MENU_W, MENU_H = 720, 470
+local TOP_H, STAGE_H = 52, 130
+local SIDE_W = 180
+local MID_H = MENU_H - TOP_H - STAGE_H
+local RAD = 14
+
+local TRANSLATIONS = {
+    EN = {
+        home = "Home", esp = "ESP", aimbot = "Aim Bot", setting = "Setting",
+        gunSkin = "Gun Skin", knifeSkin = "Knife Skin",
+        main = "MAIN", features = "FEATURES", system = "SYSTEM", skins = "SKINS",
+        search = "Search...",
+        homePanel = "HOME", homeSub = "Welcome to Oreo Hub",
+        espPanel = "ESP", espSub = "Player visual overlay",
+        aimPanel = "AIM BOT", aimSub = "Lock-on auto aim",
+        setPanel = "SETTING", setSub = "Customize your hub",
+        gunPanel = "GUN SKIN", gunSub = "Coming soon...",
+        knifePanel = "KNIFE SKIN", knifeSub = "Coming soon...",
+        profileTitle = "👤  Profile",
+        aimCard1 = "🎯  Aimbot Settings",
+        aimCard2 = "⚙️  Advanced",
+        enableAim = "Enable Aimbot", enableAimDesc = "Hold Right-Click to lock on",
+        lockTarget = "Lock on Target", lockTargetDesc = "Must kill before switching",
+        fovLabel = "FOV (screen radius)", maxDistLabel = "Max Distance",
+        smoothLabel = "Smoothness",
+        teamCheck = "Team Check", teamCheckDesc = "Skip teammates",
+        showFov = "Show FOV Circle", showFovDesc = "Draw circle on screen",
+        noShake = "No Camera Shake", noShakeDesc = "Stabilize camera when shooting",
+        welcomeTitle = "⭐  Welcome to Oreo Hub",
+        welcomeText = "v16: Camera fixed + FOV circle + max distance slider.",
+        noticeTitle = "📢  News",
+        noticeText = "Hold Right-Click to aim. FOV circle shows aim range.",
+    },
+    TV = {
+        home = "Trang chủ", esp = "ESP", aimbot = "Ngắm tự động", setting = "Cài đặt",
+        gunSkin = "Skin súng", knifeSkin = "Skin dao",
+        main = "CHÍNH", features = "TÍNH NĂNG", system = "HỆ THỐNG", skins = "SKIN",
+        search = "Tìm kiếm...",
+        homePanel = "TRANG CHỦ", homeSub = "Chào mừng tới Oreo Hub",
+        espPanel = "ESP", espSub = "Lớp phủ hình ảnh",
+        aimPanel = "NGẮM TỰ ĐỘNG", aimSub = "Khóa mục tiêu",
+        setPanel = "CÀI ĐẶT", setSub = "Tùy chỉnh hub",
+        gunPanel = "SKIN SÚNG", gunSub = "Sắp ra mắt...",
+        knifePanel = "SKIN DAO", knifeSub = "Sắp ra mắt...",
+        profileTitle = "👤  Hồ sơ",
+        aimCard1 = "🎯  Cài đặt Aimbot",
+        aimCard2 = "⚙️  Nâng cao",
+        enableAim = "Bật Aimbot", enableAimDesc = "Giữ Chuột Phải để khóa",
+        lockTarget = "Khóa mục tiêu", lockTargetDesc = "Phải giết mới đổi",
+        fovLabel = "FOV (bán kính màn hình)", maxDistLabel = "Khoảng cách tối đa",
+        smoothLabel = "Độ mượt",
+        teamCheck = "Kiểm tra đồng đội", teamCheckDesc = "Bỏ qua đồng đội",
+        showFov = "Hiện vòng FOV", showFovDesc = "Vẽ vòng tròn trên màn hình",
+        noShake = "Không giật Camera", noShakeDesc = "Ổn định camera khi bắn",
+        welcomeTitle = "⭐  Chào mừng tới Oreo Hub",
+        welcomeText = "v16: Đã fix camera + thêm vòng FOV + slider khoảng cách.",
+        noticeTitle = "📢  Thông báo",
+        noticeText = "Giữ Chuột Phải để aim. Vòng FOV hiển thị phạm vi ngắm.",
+    },
+}
+local currentLang = "EN"
+
+local langItems = {}
+local function addLangItem(label, key)
+    table.insert(langItems, { label = label, key = key })
+end
+
+local C = {
+    Sky1 = Color3.fromRGB(180, 218, 240),
+    Sky2 = Color3.fromRGB(140, 195, 235),
+    TopBar = Color3.fromRGB(126, 184, 227),
+    Cloud = Color3.fromRGB(255, 255, 255),
+    Wood1 = Color3.fromRGB(168, 122, 88),
+    Wood2 = Color3.fromRGB(130, 92, 68),
+    WoodDark = Color3.fromRGB(110, 76, 55),
+    SectionTxt = Color3.fromRGB(255, 235, 200),
+    TabTxt = Color3.fromRGB(255, 240, 215),
+    TabActive = Color3.fromRGB(255, 250, 220),
+    TabActiveB = Color3.fromRGB(245, 200, 70),
+    Content = Color3.fromRGB(240, 235, 220),
+    CardBg = Color3.fromRGB(253, 248, 232),
+    CardBorder = Color3.fromRGB(245, 200, 66),
+    CardHead = Color3.fromRGB(255, 252, 240),
+    TextDark = Color3.fromRGB(70, 50, 30),
+    TextMuted = Color3.fromRGB(150, 130, 110),
+    Red = Color3.fromRGB(231, 76, 60),
+    Green = Color3.fromRGB(90, 160, 60),
+    Grass = Color3.fromRGB(88, 168, 60),
+    GrassTop = Color3.fromRGB(120, 200, 80),
+    Dirt = Color3.fromRGB(160, 105, 65),
+    BrickLine = Color3.fromRGB(110, 65, 40),
+    PipeLight = Color3.fromRGB(110, 220, 100),
+    PipeMain = Color3.fromRGB(60, 180, 60),
+    PipeDark = Color3.fromRGB(30, 130, 30),
+    PipeOutline = Color3.fromRGB(20, 80, 20),
+}
+
+local function corner(f, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r)
+    c.Parent = f
+    return c
+end
+local function stroke(f, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Color = color
+    s.Thickness = thickness or 1
+    s.Transparency = transparency or 0
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = f
+    return s
+end
+local function buildPixel(parent, pattern, palette, pixelSize, flip, zidx)
+    local container = Instance.new("Frame")
+    container.BackgroundTransparency = 1
+    container.ZIndex = zidx or 10
+    container.Parent = parent
+    local w = #pattern[1] * pixelSize
+    local h = #pattern * pixelSize
+    container.Size = UDim2.new(0, w, 0, h)
+    for r = 1, #pattern do
+        local line = pattern[r]
+        if flip then line = string.reverse(line) end
+        for c = 1, #line do
+            local ch = line:sub(c, c)
+            if palette[ch] then
+                local px = Instance.new("Frame")
+                px.Size = UDim2.new(0, pixelSize, 0, pixelSize)
+                px.Position = UDim2.new(0, (c-1)*pixelSize, 0, (r-1)*pixelSize)
+                px.BackgroundColor3 = palette[ch]
+                px.BorderSizePixel = 0
+                px.ZIndex = zidx or 10
+                px.Parent = container
+            end
+        end
+    end
+    return container, w, h
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "OreoHub"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, MENU_W, 0, MENU_H)
+main.Position = UDim2.new(0.5, -MENU_W/2, 0.5, -MENU_H/2)
+main.BackgroundColor3 = C.Sky1
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.ClipsDescendants = true
+main.Parent = screenGui
+corner(main, RAD)
+stroke(main, Color3.fromRGB(80, 60, 50), 2, 0.2)
+
+local skyGrad = Instance.new("UIGradient")
+skyGrad.Rotation = 90
+skyGrad.Color = ColorSequence.new(C.Sky1, C.Sky2)
+skyGrad.Parent = main
+
+-- TOP BAR
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, TOP_H)
+topBar.BackgroundColor3 = C.TopBar
+topBar.BorderSizePixel = 0
+topBar.ZIndex = 10
+topBar.Parent = main
+corner(topBar, RAD)
+local topFix = Instance.new("Frame")
+topFix.Size = UDim2.new(1, 0, 0, RAD)
+topFix.Position = UDim2.new(0, 0, 1, -RAD)
+topFix.BackgroundColor3 = C.TopBar
+topFix.BorderSizePixel = 0
+topFix.ZIndex = 10
+topFix.Parent = topBar
+local tbGrad = Instance.new("UIGradient")
+tbGrad.Rotation = 90
+tbGrad.Color = ColorSequence.new(Color3.fromRGB(150, 200, 235), Color3.fromRGB(105, 165, 215))
+tbGrad.Parent = topBar
+
+-- MÂY
+local cloudHolder = Instance.new("Frame")
+cloudHolder.Size = UDim2.new(1, 0, 1, 0)
+cloudHolder.BackgroundTransparency = 1
+cloudHolder.ClipsDescendants = true
+cloudHolder.ZIndex = 10
+cloudHolder.Parent = topBar
+corner(cloudHolder, RAD)
+
+local function makeMarioCloud(scale)
+    local c = Instance.new("Frame")
+    c.BackgroundTransparency = 1
+    c.Size = UDim2.new(0, 56 * scale, 0, 22 * scale)
+    c.ZIndex = 10
+    c.Parent = cloudHolder
+    local function puff(px, py, s)
+        local p = Instance.new("Frame")
+        p.Size = UDim2.new(0, s * scale, 0, s * scale)
+        p.Position = UDim2.new(0, px * scale, 0, py * scale)
+        p.BackgroundColor3 = C.Cloud
+        p.BorderSizePixel = 0
+        p.ZIndex = 10
+        p.Parent = c
+        corner(p, 999)
+    end
+    puff(0, 6, 16); puff(14, 0, 22); puff(34, 6, 16)
+    return c
+end
+
+local clouds = {}
+for i = 1, 5 do
+    local scale = 0.5 + math.random() * 0.5
+    local cl = makeMarioCloud(scale)
+    local baseY = 4 + math.random(-2, 6)
+    local baseX = math.random(0, MENU_W)
+    cl.Position = UDim2.new(0, baseX, 0, baseY)
+    table.insert(clouds, {
+        obj = cl, speed = 10 + math.random() * 15,
+        baseY = baseY, baseX = baseX,
+        bobAmp = 1.5 + math.random() * 1.5,
+        bobFreq = 0.5 + math.random() * 0.5,
+        phase = math.random() * math.pi * 2,
+    })
+end
+task.spawn(function()
+    local t0 = tick()
+    while cloudHolder.Parent do
+        local elapsed = tick() - t0
+        for _, cl in ipairs(clouds) do
+            local newX = cl.baseX + cl.speed * elapsed
+            local wrapW = MENU_W + 80
+            newX = ((newX + 40) % wrapW) - 40
+            local bobY = math.sin(elapsed * cl.bobFreq * math.pi * 2 + cl.phase) * cl.bobAmp
+            cl.obj.Position = UDim2.new(0, newX, 0, cl.baseY + bobY)
+        end
+        task.wait()
+    end
+end)
+
+-- LOGO
+local logoFrame = Instance.new("Frame")
+logoFrame.Size = UDim2.new(0, 40, 0, 40)
+logoFrame.Position = UDim2.new(0, 12, 0.5, -20)
+logoFrame.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
+logoFrame.BorderSizePixel = 0
+logoFrame.ZIndex = 12
+logoFrame.Parent = topBar
+corner(logoFrame, 999)
+stroke(logoFrame, Color3.fromRGB(255, 255, 255), 2)
+
+local MARIO_FACE = {
+    "...RRRRRRRR...", ".RRRRRRRRRRRR.", "RRRRRRRRRRRRRR", "RRRRRRRRRRRRRR",
+    "NNSSSSSSSSSSNN", "NSSKSSSSSSKSSN", "NSSKSSSSSSKSSN", "NSSSSSSSSSSSSN",
+    "NSSSSSSSSSSSSN", "SSSSSSSSSSSSSS", "SSSNNNNNNNNSSS", "SSNNNNNNNNNNSS",
+    "SSNNNNNNNNNNSS", "..SSSSSSSSSS..",
+}
+local FACE_COLORS = {
+    R = Color3.fromRGB(220, 40, 40), S = Color3.fromRGB(255, 205, 155),
+    N = Color3.fromRGB(90, 50, 20), K = Color3.fromRGB(15, 15, 15),
+}
+local faceContainer = Instance.new("Frame")
+faceContainer.Size = UDim2.new(0, 28, 0, 28)
+faceContainer.Position = UDim2.new(0.5, -14, 0.5, -14)
+faceContainer.BackgroundTransparency = 1
+faceContainer.ZIndex = 13
+faceContainer.Parent = logoFrame
+for r = 1, #MARIO_FACE do
+    local line = MARIO_FACE[r]
+    for cc = 1, #line do
+        local ch = line:sub(cc, cc)
+        if FACE_COLORS[ch] then
+            local px = Instance.new("Frame")
+            px.Size = UDim2.new(0, 2, 0, 2)
+            px.Position = UDim2.new(0, (cc-1)*2, 0, (r-1)*2)
+            px.BackgroundColor3 = FACE_COLORS[ch]
+            px.BorderSizePixel = 0
+            px.ZIndex = 14
+            px.Parent = faceContainer
+        end
+    end
+end
+
+local titleShadow = Instance.new("TextLabel")
+titleShadow.Size = UDim2.new(0, 220, 1, 0)
+titleShadow.Position = UDim2.new(0, 58, 0, 2)
+titleShadow.BackgroundTransparency = 1
+titleShadow.Text = "OREO HUB"
+titleShadow.Font = Enum.Font.GothamBlack
+titleShadow.TextSize = 24
+titleShadow.TextColor3 = Color3.fromRGB(120, 30, 30)
+titleShadow.TextXAlignment = Enum.TextXAlignment.Left
+titleShadow.ZIndex = 11
+titleShadow.Parent = topBar
+
+local titleMain = Instance.new("TextLabel")
+titleMain.Size = UDim2.new(0, 220, 1, 0)
+titleMain.Position = UDim2.new(0, 58, 0, 0)
+titleMain.BackgroundTransparency = 1
+titleMain.Text = "OREO HUB"
+titleMain.Font = Enum.Font.GothamBlack
+titleMain.TextSize = 24
+titleMain.TextColor3 = Color3.fromRGB(255, 210, 60)
+titleMain.TextXAlignment = Enum.TextXAlignment.Left
+titleMain.ZIndex = 12
+titleMain.Parent = topBar
+stroke(titleMain, Color3.fromRGB(90, 40, 20), 2)
+
+local badge = Instance.new("TextLabel")
+badge.Size = UDim2.new(0, 110, 0, 22)
+badge.Position = UDim2.new(0, 220, 0.5, -11)
+badge.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
+badge.BorderSizePixel = 0
+badge.Text = "by OreoHub"
+badge.Font = Enum.Font.GothamSemibold
+badge.TextSize = 11
+badge.TextColor3 = Color3.fromRGB(70, 70, 70)
+badge.ZIndex = 12
+badge.Parent = topBar
+corner(badge, 11)
+
+local miniProfile = Instance.new("Frame")
+miniProfile.Size = UDim2.new(0, 100, 0, 28)
+miniProfile.Position = UDim2.new(1, -330, 0.5, -14)
+miniProfile.BackgroundColor3 = Color3.fromRGB(90, 140, 200)
+miniProfile.BorderSizePixel = 0
+miniProfile.ZIndex = 12
+miniProfile.Parent = topBar
+corner(miniProfile, 14)
+stroke(miniProfile, Color3.fromRGB(255, 255, 255), 1.5)
+
+local miniAvatar = Instance.new("ImageLabel")
+miniAvatar.Size = UDim2.new(0, 24, 0, 24)
+miniAvatar.Position = UDim2.new(0, 2, 0.5, -12)
+miniAvatar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+miniAvatar.BorderSizePixel = 0
+miniAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
+miniAvatar.ZIndex = 13
+miniAvatar.Parent = miniProfile
+corner(miniAvatar, 999)
+
+local miniName = Instance.new("TextLabel")
+miniName.Size = UDim2.new(1, -32, 1, 0)
+miniName.Position = UDim2.new(0, 30, 0, 0)
+miniName.BackgroundTransparency = 1
+miniName.Text = displayName
+miniName.Font = Enum.Font.GothamBold
+miniName.TextSize = 11
+miniName.TextColor3 = Color3.fromRGB(255, 255, 255)
+miniName.TextXAlignment = Enum.TextXAlignment.Left
+miniName.TextTruncate = Enum.TextTruncate.AtEnd
+miniName.ZIndex = 13
+miniName.Parent = miniProfile
+
+local langFrame = Instance.new("Frame")
+langFrame.Size = UDim2.new(0, 90, 0, 30)
+langFrame.Position = UDim2.new(1, -220, 0.5, -15)
+langFrame.BackgroundColor3 = Color3.fromRGB(255, 210, 60)
+langFrame.BorderSizePixel = 0
+langFrame.ZIndex = 12
+langFrame.Parent = topBar
+corner(langFrame, 15)
+stroke(langFrame, Color3.fromRGB(90, 60, 20), 1.5)
+
+local enBtn = Instance.new("TextButton")
+enBtn.Size = UDim2.new(0.5, 0, 1, 0)
+enBtn.BackgroundTransparency = 1
+enBtn.Text = "EN"
+enBtn.Font = Enum.Font.GothamBold
+enBtn.TextSize = 13
+enBtn.TextColor3 = Color3.fromRGB(60, 40, 20)
+enBtn.ZIndex = 13
+enBtn.Parent = langFrame
+
+local tvBtn = Instance.new("TextButton")
+tvBtn.Size = UDim2.new(0.5, 0, 1, 0)
+tvBtn.Position = UDim2.new(0.5, 0, 0, 0)
+tvBtn.BackgroundTransparency = 1
+tvBtn.Text = "TV"
+tvBtn.Font = Enum.Font.GothamBold
+tvBtn.TextSize = 13
+tvBtn.TextColor3 = Color3.fromRGB(180, 120, 40)
+tvBtn.ZIndex = 13
+tvBtn.Parent = langFrame
+
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 30, 0, 30)
+minBtn.Position = UDim2.new(1, -120, 0.5, -15)
+minBtn.BackgroundColor3 = Color3.fromRGB(245, 200, 60)
+minBtn.BorderSizePixel = 0
+minBtn.Text = "−"
+minBtn.Font = Enum.Font.GothamBlack
+minBtn.TextSize = 22
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.AutoButtonColor = false
+minBtn.ZIndex = 12
+minBtn.Parent = topBar
+corner(minBtn, 8)
+stroke(minBtn, Color3.fromRGB(180, 140, 30), 1.5)
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -80, 0.5, -15)
+closeBtn.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBlack
+closeBtn.TextSize = 16
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.AutoButtonColor = false
+closeBtn.ZIndex = 12
+closeBtn.Parent = topBar
+corner(closeBtn, 8)
+stroke(closeBtn, Color3.fromRGB(170, 30, 30), 1.5)
+
+-- SIDEBAR
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, SIDE_W, 0, MENU_H - TOP_H)
+sidebar.Position = UDim2.new(0, 0, 0, TOP_H)
+sidebar.BackgroundColor3 = C.Wood1
+sidebar.BorderSizePixel = 0
+sidebar.ZIndex = 5
+sidebar.Parent = main
+local woodGrad = Instance.new("UIGradient")
+woodGrad.Rotation = 90
+woodGrad.Color = ColorSequence.new(C.Wood1, C.Wood2)
+woodGrad.Parent = sidebar
+for i = 1, 11 do
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 1)
+    line.Position = UDim2.new(0, 0, 0, i * 40)
+    line.BackgroundColor3 = C.WoodDark
+    line.BackgroundTransparency = 0.65
+    line.BorderSizePixel = 0
+    line.ZIndex = 6
+    line.Parent = sidebar
+end
+
+local tabHolder = Instance.new("Frame")
+tabHolder.Size = UDim2.new(1, -20, 1, -30)
+tabHolder.Position = UDim2.new(0, 10, 0, 15)
+tabHolder.BackgroundTransparency = 1
+tabHolder.ZIndex = 7
+tabHolder.Parent = sidebar
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Padding = UDim.new(0, 4)
+tabLayout.Parent = tabHolder
+
+-- CONTENT
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(1, -SIDE_W, 0, MID_H)
+contentArea.Position = UDim2.new(0, SIDE_W, 0, TOP_H)
+contentArea.BackgroundColor3 = C.Content
+contentArea.BorderSizePixel = 0
+contentArea.ZIndex = 3
+contentArea.Parent = main
+
+local contentHeader = Instance.new("Frame")
+contentHeader.Size = UDim2.new(1, 0, 0, 68)
+contentHeader.BackgroundTransparency = 1
+contentHeader.ZIndex = 5
+contentHeader.Parent = contentArea
+
+local panelTitle = Instance.new("TextLabel")
+panelTitle.Size = UDim2.new(0, 300, 0, 32)
+panelTitle.Position = UDim2.new(0, 18, 0, 8)
+panelTitle.BackgroundTransparency = 1
+panelTitle.Text = "HOME"
+panelTitle.Font = Enum.Font.GothamBlack
+panelTitle.TextSize = 24
+panelTitle.TextColor3 = C.TextDark
+panelTitle.TextXAlignment = Enum.TextXAlignment.Left
+panelTitle.ZIndex = 6
+panelTitle.Parent = contentHeader
+
+local panelSubtitle = Instance.new("TextLabel")
+panelSubtitle.Size = UDim2.new(0, 320, 0, 18)
+panelSubtitle.Position = UDim2.new(0, 20, 0, 40)
+panelSubtitle.BackgroundTransparency = 1
+panelSubtitle.Text = "Welcome to Oreo Hub"
+panelSubtitle.Font = Enum.Font.Gotham
+panelSubtitle.TextSize = 13
+panelSubtitle.TextColor3 = C.TextMuted
+panelSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+panelSubtitle.ZIndex = 6
+panelSubtitle.Parent = contentHeader
+
+local searchBox = Instance.new("Frame")
+searchBox.Size = UDim2.new(0, 220, 0, 34)
+searchBox.Position = UDim2.new(1, -238, 0, 14)
+searchBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+searchBox.BorderSizePixel = 0
+searchBox.ZIndex = 6
+searchBox.Parent = contentHeader
+corner(searchBox, 17)
+stroke(searchBox, Color3.fromRGB(200, 185, 160), 1.5)
+
+local searchIcon = Instance.new("TextLabel")
+searchIcon.Size = UDim2.new(0, 22, 1, 0)
+searchIcon.Position = UDim2.new(0, 8, 0, 0)
+searchIcon.BackgroundTransparency = 1
+searchIcon.Text = "🔍"
+searchIcon.TextSize = 14
+searchIcon.ZIndex = 7
+searchIcon.Parent = searchBox
+
+local searchInput = Instance.new("TextBox")
+searchInput.Size = UDim2.new(1, -36, 1, 0)
+searchInput.Position = UDim2.new(0, 34, 0, 0)
+searchInput.BackgroundTransparency = 1
+searchInput.Text = ""
+searchInput.PlaceholderText = "Search..."
+searchInput.PlaceholderColor3 = Color3.fromRGB(170, 160, 150)
+searchInput.Font = Enum.Font.Gotham
+searchInput.TextSize = 13
+searchInput.TextColor3 = C.TextDark
+searchInput.TextXAlignment = Enum.TextXAlignment.Left
+searchInput.ClearTextOnFocus = false
+searchInput.ZIndex = 7
+searchInput.Parent = searchBox
+
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -20, 1, -78)
+scroll.Position = UDim2.new(0, 10, 0, 72)
+scroll.BackgroundTransparency = 1
+scroll.BorderSizePixel = 0
+scroll.ScrollBarThickness = 5
+scroll.ScrollBarImageColor3 = Color3.fromRGB(200, 180, 140)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scroll.ZIndex = 5
+scroll.Parent = contentArea
+
+local scrollLayout = Instance.new("UIListLayout")
+scrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
+scrollLayout.Padding = UDim.new(0, 10)
+scrollLayout.Parent = scroll
+
+local scrollPad = Instance.new("UIPadding")
+scrollPad.PaddingTop = UDim.new(0, 4)
+scrollPad.PaddingBottom = UDim.new(0, 12)
+scrollPad.PaddingRight = UDim.new(0, 8)
+scrollPad.Parent = scroll
+
+-- CARD
+local function createCard(parent, title, order, titleKey)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 10)
+    card.AutomaticSize = Enum.AutomaticSize.Y
+    card.BackgroundColor3 = C.CardBg
+    card.BorderSizePixel = 0
+    card.LayoutOrder = order
+    card.ZIndex = 6
+    card.Parent = parent
+    corner(card, 12)
+    stroke(card, C.CardBorder, 2.5)
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 42)
+    header.BackgroundColor3 = C.CardHead
+    header.BorderSizePixel = 0
+    header.ZIndex = 7
+    header.Parent = card
+    corner(header, 12)
+    local hFix = Instance.new("Frame")
+    hFix.Size = UDim2.new(1, 0, 0, 12)
+    hFix.Position = UDim2.new(0, 0, 1, -12)
+    hFix.BackgroundColor3 = C.CardHead
+    hFix.BorderSizePixel = 0
+    hFix.ZIndex = 7
+    hFix.Parent = header
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -30, 1, 0)
+    titleLbl.Position = UDim2.new(0, 16, 0, 0)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = title
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 16
+    titleLbl.TextColor3 = C.TextDark
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.ZIndex = 8
+    titleLbl.Parent = header
+    if titleKey then addLangItem(titleLbl, titleKey) end
+
+    local body = Instance.new("Frame")
+    body.Size = UDim2.new(1, -28, 0, 10)
+    body.Position = UDim2.new(0, 14, 0, 54)
+    body.BackgroundTransparency = 1
+    body.AutomaticSize = Enum.AutomaticSize.Y
+    body.ZIndex = 7
+    body.Parent = card
+    local bLayout = Instance.new("UIListLayout")
+    bLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    bLayout.Padding = UDim.new(0, 8)
+    bLayout.Parent = body
+    local bPad = Instance.new("UIPadding")
+    bPad.PaddingBottom = UDim.new(0, 14)
+    bPad.Parent = body
+
+    return card, body
+end
+
+local function createParagraph(parent, text, order, key)
+    local p = Instance.new("TextLabel")
+    p.Size = UDim2.new(1, 0, 0, 0)
+    p.AutomaticSize = Enum.AutomaticSize.Y
+    p.BackgroundTransparency = 1
+    p.Text = text
+    p.Font = Enum.Font.Gotham
+    p.TextSize = 13
+    p.TextColor3 = C.TextMuted
+    p.TextXAlignment = Enum.TextXAlignment.Left
+    p.TextYAlignment = Enum.TextYAlignment.Top
+    p.TextWrapped = true
+    p.LayoutOrder = order
+    p.ZIndex = 7
+    p.Parent = parent
+    if key then addLangItem(p, key) end
+    return p
+end
+
+-- TOGGLE
+local function createToggle(parent, labelKey, descKey, default, order, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 38)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = order
+    row.ZIndex = 7
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -70, 0, 20)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = TRANSLATIONS[currentLang][labelKey]
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 14
+    lbl.TextColor3 = C.TextDark
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 8
+    lbl.Parent = row
+    addLangItem(lbl, labelKey)
+
+    if descKey then
+        local d = Instance.new("TextLabel")
+        d.Size = UDim2.new(1, -70, 0, 14)
+        d.Position = UDim2.new(0, 0, 0, 20)
+        d.BackgroundTransparency = 1
+        d.Text = TRANSLATIONS[currentLang][descKey]
+        d.Font = Enum.Font.Gotham
+        d.TextSize = 11
+        d.TextColor3 = C.TextMuted
+        d.TextXAlignment = Enum.TextXAlignment.Left
+        d.ZIndex = 8
+        d.Parent = row
+        addLangItem(d, descKey)
+    end
+
+    local sw = Instance.new("Frame")
+    sw.Size = UDim2.new(0, 46, 0, 24)
+    sw.Position = UDim2.new(1, -50, 0, 6)
+    sw.BackgroundColor3 = default and C.TabActiveB or Color3.fromRGB(220, 210, 190)
+    sw.BorderSizePixel = 0
+    sw.ZIndex = 8
+    sw.Parent = row
+    corner(sw, 12)
+    stroke(sw, Color3.fromRGB(180, 160, 130), 1.5)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = default and UDim2.new(1, -21, 0, 3) or UDim2.new(0, 3, 0, 3)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 9
+    knob.Parent = sw
+    corner(knob, 999)
+    stroke(knob, Color3.fromRGB(200, 180, 150), 1)
+
+    local state = default or false
+    local hit = Instance.new("TextButton")
+    hit.Size = UDim2.new(0, 60, 0, 38)
+    hit.Position = UDim2.new(1, -60, 0, 0)
+    hit.BackgroundTransparency = 1
+    hit.Text = ""
+    hit.ZIndex = 10
+    hit.Parent = row
+
+    hit.MouseButton1Click:Connect(function()
+        state = not state
+        TweenService:Create(sw, TweenInfo.new(0.2), {
+            BackgroundColor3 = state and C.TabActiveB or Color3.fromRGB(220, 210, 190),
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {
+            Position = state and UDim2.new(1, -21, 0, 3) or UDim2.new(0, 3, 0, 3),
+        }):Play()
+        if callback then callback(state) end
+    end)
+
+    return row, function() return state end
+end
+
+-- SLIDER
+local function createSlider(parent, labelKey, default, minValue, maxValue, unit, order, callback)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 46)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = order
+    row.ZIndex = 7
+    row.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -90, 0, 18)
+    lbl.Position = UDim2.new(0, 0, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = TRANSLATIONS[currentLang][labelKey]
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 14
+    lbl.TextColor3 = C.TextDark
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 8
+    lbl.Parent = row
+    addLangItem(lbl, labelKey)
+
+    local valLbl = Instance.new("TextLabel")
+    valLbl.Size = UDim2.new(0, 90, 0, 18)
+    valLbl.Position = UDim2.new(1, -90, 0, 0)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Text = tostring(default) .. (unit or "")
+    valLbl.Font = Enum.Font.GothamBold
+    valLbl.TextSize = 14
+    valLbl.TextColor3 = C.Red
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valLbl.ZIndex = 8
+    valLbl.Parent = row
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(1, 0, 0, 14)
+    track.Position = UDim2.new(0, 0, 0, 26)
+    track.BackgroundColor3 = Color3.fromRGB(225, 215, 195)
+    track.BorderSizePixel = 0
+    track.ZIndex = 8
+    track.Parent = row
+    corner(track, 7)
+    stroke(track, Color3.fromRGB(190, 175, 150), 1)
+
+    local initialT = (default - minValue) / (maxValue - minValue)
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new(initialT, 0, 1, 0)
+    fill.BackgroundColor3 = C.TabActiveB
+    fill.BorderSizePixel = 0
+    fill.ZIndex = 9
+    fill.Parent = track
+    corner(fill, 7)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 22, 0, 22)
+    knob.Position = UDim2.new(initialT, -11, 0.5, -11)
+    knob.BackgroundColor3 = C.TabActiveB
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 10
+    knob.Parent = track
+    corner(knob, 999)
+    stroke(knob, Color3.fromRGB(190, 150, 30), 1.5)
+
+    local value = default
+    local dragging = false
+
+    local hit = Instance.new("TextButton")
+    hit.Size = UDim2.new(1, 20, 0, 30)
+    hit.Position = UDim2.new(0, -10, 0, 18)
+    hit.BackgroundTransparency = 1
+    hit.Text = ""
+    hit.ZIndex = 11
+    hit.Parent = row
+
+    local function updateFromX(mx)
+        local pos = track.AbsolutePosition.X
+        local w = track.AbsoluteSize.X
+        local t = math.clamp((mx - pos) / w, 0, 1)
+        value = math.floor((minValue + t * (maxValue - minValue)) * 10 + 0.5) / 10
+        valLbl.Text = tostring(value) .. (unit or "")
+        fill.Size = UDim2.new(t, 0, 1, 0)
+        knob.Position = UDim2.new(t, -11, 0.5, -11)
+        if callback then callback(value) end
+    end
+
+    hit.MouseButton1Down:Connect(function()
+        dragging = true
+        updateFromX(UserInputService:GetMouseLocation().X)
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateFromX(input.Position.X)
+        end
+    end)
+
+    return row, function() return value end
+end
+
+-- PIXEL ICONS
+local MUSHROOM_P = {
+    "..RRRRRRRR..", ".RRWWRRWWRR.", "RRRWWRRWWRRR", "RRRWWRRWWRRR",
+    "RRRRRRRRRRRR", ".KKKKKKKKKK.", ".SSSSSSSSSS.", "SSSSSSSSSSSS",
+    "SSSSSSSSSSSS", "SSSSSSSSSSSS", ".SSSSSSSSSS.", "..SSSSSSSS..",
+}
+local MUSHROOM_C = {
+    R = Color3.fromRGB(220, 40, 40), W = Color3.fromRGB(255, 255, 255),
+    K = Color3.fromRGB(20, 15, 15), S = Color3.fromRGB(255, 235, 190),
+}
+local EYE_P = {
+    "...WWWWWW...", "..WWWWWWWW..", ".WWWWWWWWWW.",
+    "WWWWBBBBWWWW", "WWWBBBBBBWWW", "WWWBBKKBBWWW",
+    "WWWBBKKBBWWW", "WWWBBBBBBWWW", "WWWWBBBBWWWW",
+    ".WWWWWWWWWW.", "..WWWWWWWW..", "...WWWWWW...",
+}
+local EYE_C = {
+    W = Color3.fromRGB(255, 255, 255), B = Color3.fromRGB(60, 130, 220),
+    K = Color3.fromRGB(15, 15, 15),
+}
+local TARGET_P = {
+    "...RRRRRR...", "..RRWWWWRR..", ".RRWWWWWWRR.",
+    "RRWWWKKWWWRR", "RWWWWKKWWWWR", "RWWKKKKKKWWR",
+    "RWWKKKKKKWWR", "RWWWWKKWWWWR", "RRWWWKKWWWRR",
+    ".RRWWWWWWRR.", "..RRWWWWRR..", "...RRRRRR...",
+}
+local TARGET_C = {
+    R = Color3.fromRGB(220, 40, 40), W = Color3.fromRGB(255, 255, 255),
+    K = Color3.fromRGB(20, 15, 15),
+}
+local GEAR_P = {
+    "....GGGG....", "..GGGGGGGG..", ".GGGGGGGGGG.",
+    "GGGGKKKKGGGG", "GGGKKKKKKGGG", "GGKKKWWKKKGG",
+    "GGKWWKKKGG", "GGGKKKKKKGGG", "GGGGKKKKGGGG",
+    ".GGGGGGGGGG.", "..GGGGGGGG..", "....GGGG....",
+}
+local GEAR_C = {
+    G = Color3.fromRGB(90, 140, 200), K = Color3.fromRGB(50, 90, 140),
+    W = Color3.fromRGB(20, 30, 50),
+}
+local GUN_P = {
+    "............", "..KKKKKKK...", ".KDDDDDDDK..",
+    "KDDKKDDDDDK.", "KDDDDDDDDDK.", "KDDDDDDDDDK.",
+    ".KKKKKKKKKK.", "....KKK.....", "...KK.......",
+    "..KK........", "............", "............",
+}
+local GUN_C = {
+    K = Color3.fromRGB(15, 15, 15), D = Color3.fromRGB(80, 85, 95),
+}
+local KNIFE_P = {
+    "..........KK", ".........KWW", "........KWWS",
+    ".......KWWSS", "......KWWSS.", ".....KWWSS..",
+    "....KWWSS...", "...KWWSS....", "..KWWSS.....",
+    ".KWWSS......", "KBBS........", "KKK.........",
+}
+local KNIFE_C = {
+    K = Color3.fromRGB(15, 15, 15), W = Color3.fromRGB(220, 230, 240),
+    S = Color3.fromRGB(150, 160, 175), B = Color3.fromRGB(120, 60, 30),
+}
+
+-- TAB SYSTEM
+local tabs = {}
+local activeTab = nil
+local sectionHeaders = {}
+
+local function activateTab(tab)
+    if not tab or activeTab == tab then return end
+    if activeTab then
+        TweenService:Create(activeTab.btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(140, 100, 72),
+            BackgroundTransparency = 1,
+        }):Play()
+        TweenService:Create(activeTab.stroke, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+        TweenService:Create(activeTab.nameLbl, TweenInfo.new(0.2), { TextColor3 = C.TabTxt }):Play()
+        activeTab.content.Visible = false
+    end
+    activeTab = tab
+    TweenService:Create(tab.btn, TweenInfo.new(0.2), {
+        BackgroundColor3 = C.TabActive, BackgroundTransparency = 0,
+    }):Play()
+    TweenService:Create(tab.stroke, TweenInfo.new(0.2), {
+        Transparency = 0, Color = C.TabActiveB,
+    }):Play()
+    TweenService:Create(tab.nameLbl, TweenInfo.new(0.2), { TextColor3 = C.TextDark }):Play()
+    tab.content.Visible = true
+    panelTitle.Text = TRANSLATIONS[currentLang][tab.panelTitleKey]
+    panelSubtitle.Text = TRANSLATIONS[currentLang][tab.panelSubKey]
+end
+
+local function createSectionHeader(key, order)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -10, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = TRANSLATIONS[currentLang][key]
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 11
+    lbl.TextColor3 = C.SectionTxt
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.LayoutOrder = order
+    lbl.ZIndex = 8
+    lbl.Parent = tabHolder
+    addLangItem(lbl, key)
+    table.insert(sectionHeaders, lbl)
+    return lbl
+end
+
+local function createTab(nameKey, iconPattern, iconColors, layoutOrder, panelTitleKey, panelSubKey)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 40)
+    btn.BackgroundColor3 = Color3.fromRGB(140, 100, 72)
+    btn.BackgroundTransparency = 1
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.LayoutOrder = layoutOrder
+    btn.ZIndex = 8
+    btn.Parent = tabHolder
+    corner(btn, 8)
+    local s = stroke(btn, C.TabActiveB, 2, 1)
+
+    local iconHolder = Instance.new("Frame")
+    iconHolder.Size = UDim2.new(0, 26, 0, 26)
+    iconHolder.Position = UDim2.new(0, 6, 0.5, -13)
+    iconHolder.BackgroundTransparency = 1
+    iconHolder.ZIndex = 9
+    iconHolder.Parent = btn
+
+    local icon = buildPixel(iconHolder, iconPattern, iconColors, 2, false, 9)
+    icon.Position = UDim2.new(0.5, -12, 0.5, -12)
+
+    local nm = Instance.new("TextLabel")
+    nm.Size = UDim2.new(1, -44, 1, 0)
+    nm.Position = UDim2.new(0, 38, 0, 0)
+    nm.BackgroundTransparency = 1
+    nm.Text = TRANSLATIONS[currentLang][nameKey]
+    nm.Font = Enum.Font.GothamBold
+    nm.TextSize = 14
+    nm.TextColor3 = C.TabTxt
+    nm.TextXAlignment = Enum.TextXAlignment.Left
+    nm.ZIndex = 9
+    nm.Parent = btn
+    addLangItem(nm, nameKey)
+
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1, 0, 0, 10)
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.BackgroundTransparency = 1
+    content.Visible = false
+    content.ZIndex = 5
+    content.Parent = scroll
+    local cl = Instance.new("UIListLayout")
+    cl.SortOrder = Enum.SortOrder.LayoutOrder
+    cl.Padding = UDim.new(0, 10)
+    cl.Parent = content
+
+    local data = {
+        btn = btn, stroke = s, content = content, nameKey = nameKey,
+        panelTitleKey = panelTitleKey, panelSubKey = panelSubKey,
+        nameLbl = nm,
+    }
+    table.insert(tabs, data)
+
+    btn.MouseEnter:Connect(function()
+        if activeTab ~= data then
+            TweenService:Create(btn, TweenInfo.new(0.15), {
+                BackgroundColor3 = Color3.fromRGB(150, 110, 80),
+                BackgroundTransparency = 0.35,
+            }):Play()
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        if activeTab ~= data then
+            TweenService:Create(btn, TweenInfo.new(0.15), {
+                BackgroundTransparency = 1,
+            }):Play()
+        end
+    end)
+    btn.MouseButton1Click:Connect(function() activateTab(data) end)
+
+    return data, content
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- 🎯 AIMBOT STATE
+-- ═══════════════════════════════════════════════════════════
+local AIMBOT = {
+    enabled = false,
+    lockTarget = true,
+    fov = 300,           -- FOV radius tính bằng pixels (bán kính màn hình)
+    maxDistance = 1000,  -- Khoảng cách tối đa (studs)
+    smooth = 0.25,
+    teamCheck = true,
+    showFov = true,
+    noShake = false,
+    aimKey = Enum.UserInputType.MouseButton2,
+    isHolding = false,
+    lockedTarget = nil,
+}
+
+-- ═══════════════════════════════════════════════════════════
+-- TẠO TABS
+-- ═══════════════════════════════════════════════════════════
+
+createSectionHeader("main", 1)
+local tabHome, contHome = createTab("home", MUSHROOM_P, MUSHROOM_C, 2, "homePanel", "homeSub")
+
+do
+    local _, bodyProfile = createCard(contHome, TRANSLATIONS[currentLang].profileTitle, 1, "profileTitle")
+    local profileRow = Instance.new("Frame")
+    profileRow.Size = UDim2.new(1, 0, 0, 80)
+    profileRow.BackgroundTransparency = 1
+    profileRow.LayoutOrder = 1
+    profileRow.ZIndex = 7
+    profileRow.Parent = bodyProfile
+
+    local avatarFrame = Instance.new("Frame")
+    avatarFrame.Size = UDim2.new(0, 72, 0, 72)
+    avatarFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    avatarFrame.BorderSizePixel = 0
+    avatarFrame.ZIndex = 8
+    avatarFrame.Parent = profileRow
+    corner(avatarFrame, 12)
+    stroke(avatarFrame, C.CardBorder, 2.5)
+
+    local avatarImg = Instance.new("ImageLabel")
+    avatarImg.Size = UDim2.new(1, -6, 1, -6)
+    avatarImg.Position = UDim2.new(0, 3, 0, 3)
+    avatarImg.BackgroundTransparency = 1
+    avatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
+    avatarImg.ZIndex = 9
+    avatarImg.Parent = avatarFrame
+    corner(avatarImg, 9)
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1, -90, 0, 26)
+    nameLbl.Position = UDim2.new(0, 84, 0, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Text = displayName
+    nameLbl.Font = Enum.Font.GothamBlack
+    nameLbl.TextSize = 20
+    nameLbl.TextColor3 = C.TextDark
+    nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    nameLbl.ZIndex = 8
+    nameLbl.Parent = profileRow
+
+    local userLbl = Instance.new("TextLabel")
+    userLbl.Size = UDim2.new(1, -90, 0, 16)
+    userLbl.Position = UDim2.new(0, 84, 0, 26)
+    userLbl.BackgroundTransparency = 1
+    userLbl.Text = "@" .. username
+    userLbl.Font = Enum.Font.Gotham
+    userLbl.TextSize = 12
+    userLbl.TextColor3 = C.TextMuted
+    userLbl.TextXAlignment = Enum.TextXAlignment.Left
+    userLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    userLbl.ZIndex = 8
+    userLbl.Parent = profileRow
+
+    local gameLbl = Instance.new("TextLabel")
+    gameLbl.Size = UDim2.new(1, -90, 0, 24)
+    gameLbl.Position = UDim2.new(0, 84, 0, 48)
+    gameLbl.BackgroundTransparency = 1
+    gameLbl.Text = "🎮  " .. gameName
+    gameLbl.Font = Enum.Font.GothamBold
+    gameLbl.TextSize = 13
+    gameLbl.TextColor3 = C.Red
+    gameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    gameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+    gameLbl.ZIndex = 8
+    gameLbl.Parent = profileRow
+end
+
+do
+    local _, body1 = createCard(contHome, TRANSLATIONS[currentLang].welcomeTitle, 2, "welcomeTitle")
+    createParagraph(body1, TRANSLATIONS[currentLang].welcomeText, 1, "welcomeText")
+    local _, body2 = createCard(contHome, TRANSLATIONS[currentLang].noticeTitle, 3, "noticeTitle")
+    createParagraph(body2, TRANSLATIONS[currentLang].noticeText, 1, "noticeText")
+end
+
+createSectionHeader("features", 10)
+local tabESP, contESP = createTab("esp", EYE_P, EYE_C, 11, "espPanel", "espSub")
+local tabAim, contAim = createTab("aimbot", TARGET_P, TARGET_C, 12, "aimPanel", "aimSub")
+
+-- 🎯 AIM BOT UI
+do
+    local _, bodyAim = createCard(contAim, TRANSLATIONS[currentLang].aimCard1, 1, "aimCard1")
+
+    createToggle(bodyAim, "enableAim", "enableAimDesc", false, 1, function(v)
+        AIMBOT.enabled = v
+    end)
+
+    createToggle(bodyAim, "lockTarget", "lockTargetDesc", true, 2, function(v)
+        AIMBOT.lockTarget = v
+    end)
+
+    createSlider(bodyAim, "fovLabel", 300, 50, 800, "", 3, function(v)
+        AIMBOT.fov = v
+    end)
+
+    createSlider(bodyAim, "maxDistLabel", 1000, 100, 3000, "", 4, function(v)
+        AIMBOT.maxDistance = v
+    end)
+
+    createSlider(bodyAim, "smoothLabel", 0.25, 0, 1, "", 5, function(v)
+        AIMBOT.smooth = v
+    end)
+
+    local _, bodyAdv = createCard(contAim, TRANSLATIONS[currentLang].aimCard2, 2, "aimCard2")
+
+    createToggle(bodyAdv, "teamCheck", "teamCheckDesc", true, 1, function(v)
+        AIMBOT.teamCheck = v
+    end)
+
+    createToggle(bodyAdv, "showFov", "showFovDesc", true, 2, function(v)
+        AIMBOT.showFov = v
+    end)
+
+    createToggle(bodyAdv, "noShake", "noShakeDesc", false, 3, function(v)
+        AIMBOT.noShake = v
+    end)
+end
+
+createSectionHeader("skins", 20)
+local tabGun, contGun = createTab("gunSkin", GUN_P, GUN_C, 21, "gunPanel", "gunSub")
+local tabKnife, contKnife = createTab("knifeSkin", KNIFE_P, KNIFE_C, 22, "knifePanel", "knifeSub")
+
+createSectionHeader("system", 30)
+local tabSetting, contSetting = createTab("setting", GEAR_P, GEAR_C, 31, "setPanel", "setSub")
+
+activateTab(tabs[1])
+
+-- ═══════════════════════════════════════════════════════════
+-- 🎯 FOV CIRCLE (vòng tròn trên màn hình)
+-- ═══════════════════════════════════════════════════════════
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FovCircle"
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.Size = UDim2.new(0, AIMBOT.fov * 2, 0, AIMBOT.fov * 2)
+fovCircle.BackgroundTransparency = 1
+fovCircle.BorderSizePixel = 0
+fovCircle.Visible = false
+fovCircle.ZIndex = 996
+fovCircle.Parent = screenGui
+corner(fovCircle, 9999)
+local fovStroke = Instance.new("UIStroke")
+fovStroke.Color = Color3.fromRGB(255, 255, 255)
+fovStroke.Thickness = 1.5
+fovStroke.Transparency = 0.3
+fovStroke.Parent = fovCircle
+
+-- Target highlight
+local targetHighlight = Instance.new("Frame")
+targetHighlight.Name = "TargetHighlight"
+targetHighlight.AnchorPoint = Vector2.new(0.5, 0.5)
+targetHighlight.Size = UDim2.new(0, 50, 0, 50)
+targetHighlight.BackgroundTransparency = 1
+targetHighlight.BorderSizePixel = 0
+targetHighlight.Visible = false
+targetHighlight.ZIndex = 998
+targetHighlight.Parent = screenGui
+corner(targetHighlight, 9999)
+local targetStroke = Instance.new("UIStroke")
+targetStroke.Color = Color3.fromRGB(255, 80, 80)
+targetStroke.Thickness = 2.5
+targetStroke.Transparency = 0.1
+targetStroke.Parent = targetHighlight
+
+-- HP bar
+local hpBar = Instance.new("Frame")
+hpBar.Size = UDim2.new(0, 50, 0, 5)
+hpBar.Position = UDim2.new(0, 0, 1, 4)
+hpBar.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+hpBar.BorderSizePixel = 0
+hpBar.ZIndex = 999
+hpBar.Parent = targetHighlight
+corner(hpBar, 3)
+local hpFill = Instance.new("Frame")
+hpFill.Size = UDim2.new(1, 0, 1, 0)
+hpFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
+hpFill.BorderSizePixel = 0
+hpFill.ZIndex = 1000
+hpFill.Parent = hpBar
+corner(hpFill, 3)
+
+-- ===== Hàm lấy targets =====
+local function getTargets()
+    local list = {}
+    local myTeam = player.Team
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            local head = plr.Character:FindFirstChild("Head")
+            if hum and hum.Health > 0 and root then
+                if AIMBOT.teamCheck and myTeam ~= nil and plr.Team == myTeam then
+                    -- skip
+                else
+                    table.insert(list, {
+                        plr = plr, char = plr.Character, hum = hum,
+                        root = root, head = head,
+                    })
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function isTargetValid(t)
+    if not t then return false end
+    if not t.plr or not t.plr.Parent then return false end
+    if not t.char or not t.char.Parent then return false end
+    if not t.hum or t.hum.Health <= 0 then return false end
+    return true
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- 🎯 TÌM TARGET: Filter theo FOV pixel + chọn gần nhất theo studs
+-- ═══════════════════════════════════════════════════════════
+local function findClosestTarget()
+    local targets = getTargets()
+    if #targets == 0 then return nil end
+
+    local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+
+    local vpSize = camera.ViewportSize
+    local center = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
+    local myPos = myRoot.Position
+    local best, bestDist = nil, math.huge
+
+    for _, t in ipairs(targets) do
+        -- 1. Check FOV pixel (target phải nằm trong vòng tròn)
+        local screenPos, onScreen = camera:WorldToViewportPoint(t.root.Position)
+        if onScreen then
+            local sp = Vector2.new(screenPos.X, screenPos.Y)
+            local pixelDist = (sp - center).Magnitude
+
+            if pixelDist <= AIMBOT.fov then
+                -- 2. Check max distance (studs)
+                local studDist = (t.root.Position - myPos).Magnitude
+                if studDist <= AIMBOT.maxDistance and studDist < bestDist then
+                    bestDist = studDist
+                    best = t
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function getAimPosition(t)
+    if not t then return nil end
+    if t.head and t.head.Parent then
+        return t.head.Position
+    end
+    return t.root.Position
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- FOV CIRCLE UPDATE
+-- ═══════════════════════════════════════════════════════════
+RunService.RenderStepped:Connect(function()
+    if AIMBOT.enabled and AIMBOT.showFov then
+        fovCircle.Visible = true
+        fovCircle.Size = UDim2.new(0, AIMBOT.fov * 2, 0, AIMBOT.fov * 2)
+    else
+        fovCircle.Visible = false
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- 🎯 AIMBOT MAIN LOOP
+-- ═══════════════════════════════════════════════════════════
+RunService.RenderStepped:Connect(function(dt)
+    if not AIMBOT.enabled or not AIMBOT.isHolding then
+        targetHighlight.Visible = false
+        return
+    end
+
+    local t = AIMBOT.lockedTarget
+    if not isTargetValid(t) then
+        t = findClosestTarget()
+        AIMBOT.lockedTarget = t
+    end
+
+    if not t then
+        targetHighlight.Visible = false
+        return
+    end
+
+    local aimPos = getAimPosition(t)
+    if not aimPos then return end
+
+    local camPos = camera.CFrame.Position
+    local targetCF = CFrame.new(camPos, aimPos)
+
+    if AIMBOT.smooth > 0 and AIMBOT.smooth < 1 then
+        local alpha = 1 - AIMBOT.smooth
+        camera.CFrame = camera.CFrame:Lerp(targetCF, math.clamp(alpha * 10 * dt * 60, 0, 1))
+    else
+        camera.CFrame = targetCF
+    end
+
+    -- Update highlight
+    local screenPos = camera:WorldToViewportPoint(t.root.Position)
+    if screenPos.Z > 0 then
+        targetHighlight.Visible = true
+        targetHighlight.Position = UDim2.new(0, screenPos.X, 0, screenPos.Y)
+        local hpPct = t.hum.Health / t.hum.MaxHealth
+        hpFill.Size = UDim2.new(hpPct, 0, 1, 0)
+        if hpPct > 0.6 then
+            hpFill.BackgroundColor3 = Color3.fromRGB(80, 220, 80)
+        elseif hpPct > 0.3 then
+            hpFill.BackgroundColor3 = Color3.fromRGB(240, 200, 60)
+        else
+            hpFill.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+        end
+    else
+        targetHighlight.Visible = false
+    end
+end)
+
+-- Input
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if not AIMBOT.enabled then return end
+    if input.UserInputType == AIMBOT.aimKey then
+        AIMBOT.isHolding = true
+        if AIMBOT.lockTarget then
+            AIMBOT.lockedTarget = findClosestTarget()
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if input.UserInputType == AIMBOT.aimKey then
+        AIMBOT.isHolding = false
+        AIMBOT.lockedTarget = nil
+        targetHighlight.Visible = false
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════
+-- 📷 CAMERA STABILIZATION v3 - KHÔNG LOCK POSITION
+-- Chỉ reset CameraOffset + Neck.C0 + Waist.C0, không động vào position
+-- ═══════════════════════════════════════════════════════════
+
+local function resetCameraShake()
+    local char = player.Character
+    if not char then return end
+
+    -- 1. Reset CameraOffset (nguồn số 1 gây shake)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.CameraOffset = Vector3.zero
+    end
+
+    -- 2. Reset Neck.C0 (nếu game lắc đầu)
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if torso then
+        local neck = torso:FindFirstChild("Neck")
+        if neck and neck:IsA("Motor6D") then
+            if not neck:GetAttribute("OreoOrigC0") then
+                neck:SetAttribute("OreoOrigC0", neck.C0)
+            end
+            local origC0 = neck:GetAttribute("OreoOrigC0")
+            if typeof(origC0) == "CFrame" then
+                neck.C0 = origC0
+            end
+        end
+
+        -- 3. Reset Waist.C0
+        local waist = torso:FindFirstChild("Waist")
+        if waist and waist:IsA("Motor6D") then
+            if not waist:GetAttribute("OreoOrigC0") then
+                waist:SetAttribute("OreoOrigC0", waist.C0)
+            end
+            local origC0 = waist:GetAttribute("OreoOrigC0")
+            if typeof(origC0) == "CFrame" then
+                waist.C0 = origC0
+            end
+        end
+    end
+end
+
+-- Bind ưu tiên CAO HƠN Camera - chạy NGAY SAU khi game set CameraOffset
+RunService:BindToRenderStep("OreoNoShake", Enum.RenderPriority.Camera.Value + 1, function()
+    if AIMBOT.noShake then
+        resetCameraShake()
+    end
+end)
+
+-- Vòng lặp nền reset liên tục (bắt các shake đến từ event khác)
+task.spawn(function()
+    while screenGui.Parent do
+        if AIMBOT.noShake then
+            resetCameraShake()
+        end
+        task.wait()
+    end
+end)
+
+-- Hook property changed ngay lập tức (bắt shake real-time)
+task.spawn(function()
+    while screenGui.Parent do
+        local char = player.Character
+        if char and AIMBOT.noShake then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                -- Reset mỗi khi CameraOffset bị thay đổi
+                if not hum:GetAttribute("OreoHooked") then
+                    hum:SetAttribute("OreoHooked", true)
+                    hum:GetPropertyChangedSignal("CameraOffset"):Connect(function()
+                        if AIMBOT.noShake then
+                            hum.CameraOffset = Vector3.zero
+                        end
+                    end)
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- ===== SEARCH FILTER =====
+local function filterTabs(query)
+    query = query:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    for _, t in ipairs(tabs) do
+        local tabName = TRANSLATIONS[currentLang][t.nameKey]:lower()
+        t.btn.Visible = (query == "") or (tabName:find(query, 1, true) ~= nil)
+    end
+    for _, sh in ipairs(sectionHeaders) do
+        sh.Visible = (query == "")
+    end
+end
+searchInput:GetPropertyChangedSignal("Text"):Connect(function()
+    filterTabs(searchInput.Text)
+end)
+
+-- ============================================================
+-- 🍄 SCENE MARIO + LUIGI
+-- ============================================================
+
+local stage = Instance.new("Frame")
+stage.Size = UDim2.new(1, -SIDE_W, 0, STAGE_H)
+stage.Position = UDim2.new(0, SIDE_W, 1, -STAGE_H)
+stage.BackgroundTransparency = 1
+stage.ClipsDescendants = true
+stage.ZIndex = 20
+stage.Parent = main
+
+local STAGE_W = MENU_W - SIDE_W
+local GROUND_Y = 88
+
+local grass = Instance.new("Frame")
+grass.Size = UDim2.new(1, 0, 0, 8)
+grass.Position = UDim2.new(0, 0, 0, GROUND_Y)
+grass.BackgroundColor3 = C.Grass
+grass.BorderSizePixel = 0
+grass.ZIndex = 20
+grass.Parent = stage
+
+local grassTop = Instance.new("Frame")
+grassTop.Size = UDim2.new(1, 0, 0, 3)
+grassTop.BackgroundColor3 = C.GrassTop
+grassTop.BorderSizePixel = 0
+grassTop.ZIndex = 21
+grassTop.Parent = grass
+
+local dirt = Instance.new("Frame")
+dirt.Size = UDim2.new(1, 0, 1, -GROUND_Y - 8)
+dirt.Position = UDim2.new(0, 0, 0, GROUND_Y + 8)
+dirt.BackgroundColor3 = C.Dirt
+dirt.BorderSizePixel = 0
+dirt.ZIndex = 20
+dirt.Parent = stage
+for i = 0, 10 do
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(0, 1, 1, 0)
+    line.Position = UDim2.new(0, i * 55, 0, 0)
+    line.BackgroundColor3 = C.BrickLine
+    line.BackgroundTransparency = 0.35
+    line.BorderSizePixel = 0
+    line.ZIndex = 21
+    line.Parent = dirt
+end
+
+local PIPE_RIM_W = 34
+local PIPE_BODY_W = 28
+local PIPE_RIM_H = 12
+local PIPE_BODY_H = 32
+local PIPE_TOTAL_H = PIPE_RIM_H + PIPE_BODY_H
+
+local function createPipe(x)
+    local pipeTopY = GROUND_Y - PIPE_TOTAL_H
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(0, PIPE_RIM_W, 0, PIPE_TOTAL_H)
+    p.Position = UDim2.new(0, x - PIPE_RIM_W/2, 0, pipeTopY)
+    p.BackgroundTransparency = 1
+    p.ZIndex = 24
+    p.Parent = stage
+
+    local body = Instance.new("Frame")
+    body.Size = UDim2.new(0, PIPE_BODY_W, 0, PIPE_BODY_H)
+    body.Position = UDim2.new(0, (PIPE_RIM_W - PIPE_BODY_W)/2, 0, PIPE_RIM_H)
+    body.BackgroundColor3 = C.PipeMain
+    body.BorderSizePixel = 0
+    body.ZIndex = 24
+    body.Parent = p
+    stroke(body, C.PipeOutline, 2)
+    local bh = Instance.new("Frame")
+    bh.Size = UDim2.new(0, 4, 1, -4)
+    bh.Position = UDim2.new(0, 4, 0, 2)
+    bh.BackgroundColor3 = C.PipeLight
+    bh.BorderSizePixel = 0
+    bh.ZIndex = 25
+    bh.Parent = body
+    local bs = Instance.new("Frame")
+    bs.Size = UDim2.new(0, 4, 1, -4)
+    bs.Position = UDim2.new(1, -8, 0, 2)
+    bs.BackgroundColor3 = C.PipeDark
+    bs.BorderSizePixel = 0
+    bs.ZIndex = 25
+    bs.Parent = body
+
+    local rim = Instance.new("Frame")
+    rim.Size = UDim2.new(0, PIPE_RIM_W, 0, PIPE_RIM_H)
+    rim.BackgroundColor3 = C.PipeMain
+    rim.BorderSizePixel = 0
+    rim.ZIndex = 26
+    rim.Parent = p
+    stroke(rim, C.PipeOutline, 2)
+    local rh = Instance.new("Frame")
+    rh.Size = UDim2.new(1, -6, 0, 3)
+    rh.Position = UDim2.new(0, 3, 0, 3)
+    rh.BackgroundColor3 = C.PipeLight
+    rh.BorderSizePixel = 0
+    rh.ZIndex = 27
+    rh.Parent = rim
+    local rs = Instance.new("Frame")
+    rs.Size = UDim2.new(1, -6, 0, 3)
+    rs.Position = UDim2.new(0, 3, 1, -6)
+    rs.BackgroundColor3 = C.PipeDark
+    rs.BorderSizePixel = 0
+    rs.ZIndex = 27
+    rs.Parent = rim
+
+    return p, pipeTopY
+end
+
+local PIPE_X_LEFT = 130
+local PIPE_X_RIGHT = STAGE_W - 130
+local pipeLeft, pipeLeftTopY = createPipe(PIPE_X_LEFT)
+local pipeRight, pipeRightTopY = createPipe(PIPE_X_RIGHT)
+
+local MARIO_FRONT = {
+    "....RRRRRR....", "...RRRRRRRRR..", "...RRRRRRRRR..",
+    "SS.NNSSSSSSNN.", "RR.NSSSSSSSSN.", "RR.NSKSSSSKSN.",
+    "RR.NSSSSSSSSN.", "RR.SSSNNNNNSS.", "RR.SSSNNNNNSS.",
+    "RR..SSSSSSSS..", "RR..SSSSSSSS..", "RR...RRBBRR...",
+    "RRRRRRBBBBRR..", "..RRRRBBBBRR..", "..RRRRBBBBRRRS",
+    "..RRRBBBBBBRR.", "...RBBBBBBBBR.", "....BB..BB....",
+    "....BB..BB....", "...NNN..NNN...",
+}
+local MARIO_COLORS = {
+    R = Color3.fromRGB(220, 40, 40), S = Color3.fromRGB(255, 205, 155),
+    B = Color3.fromRGB(30, 90, 210), N = Color3.fromRGB(90, 50, 20),
+    K = Color3.fromRGB(15, 15, 15),
+}
+local LUIGI_COLORS = {
+    R = Color3.fromRGB(40, 180, 60), S = Color3.fromRGB(255, 205, 155),
+    B = Color3.fromRGB(30, 90, 210), N = Color3.fromRGB(90, 50, 20),
+    K = Color3.fromRGB(15, 15, 15),
+}
+
+local PIXEL = 2
+local mario, marioW, marioH = buildPixel(stage, MARIO_FRONT, MARIO_COLORS, PIXEL, false, 23)
+local luigi, luigiW, luigiH = buildPixel(stage, MARIO_FRONT, LUIGI_COLORS, PIXEL, false, 23)
+
+local marioX = PIPE_X_LEFT - marioW/2
+local luigiX = PIPE_X_RIGHT - luigiW/2
+local HIDDEN_Y = pipeLeftTopY
+local OUT_Y = pipeLeftTopY - 25
+
+mario.Position = UDim2.new(0, marioX, 0, HIDDEN_Y)
+luigi.Position = UDim2.new(0, luigiX, 0, HIDDEN_Y)
+
+local function popUp(char, baseX, fromY, toY, dur)
+    char.Position = UDim2.new(0, baseX, 0, fromY)
+    TweenService:Create(char, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, baseX, 0, toY),
+    }):Play()
+    task.wait(dur)
+end
+local function popDown(char, baseX, fromY, toY, dur)
+    TweenService:Create(char, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Position = UDim2.new(0, baseX, 0, toY),
+    }):Play()
+    task.wait(dur)
+end
+local function wave(char, baseX, baseY, times)
+    for i = 1, times do
+        TweenService:Create(char, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+            Position = UDim2.new(0, baseX, 0, baseY - 5),
+        }):Play()
+        task.wait(0.15)
+        TweenService:Create(char, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+            Position = UDim2.new(0, baseX, 0, baseY),
+        }):Play()
+        task.wait(0.15)
+    end
+end
+
+task.spawn(function()
+    task.wait(0.8)
+    while main.Parent do
+        mario.Position = UDim2.new(0, marioX, 0, HIDDEN_Y)
+        luigi.Position = UDim2.new(0, luigiX, 0, HIDDEN_Y)
+        task.wait(0.5)
+        popUp(mario, marioX, HIDDEN_Y, OUT_Y, 0.55)
+        task.wait(0.2)
+        wave(mario, marioX, OUT_Y, 3)
+        task.wait(0.3)
+        popDown(mario, marioX, OUT_Y, HIDDEN_Y, 0.5)
+        task.wait(0.6)
+        popUp(luigi, luigiX, HIDDEN_Y, OUT_Y, 0.55)
+        task.wait(0.2)
+        wave(luigi, luigiX, OUT_Y, 3)
+        task.wait(0.3)
+        popDown(luigi, luigiX, OUT_Y, HIDDEN_Y, 0.5)
+        task.wait(0.7)
+    end
+end)
+
+-- NGÔN NGỮ
+local function setLanguage(lang)
+    currentLang = lang
+    for _, item in ipairs(langItems) do
+        local txt = TRANSLATIONS[lang][item.key]
+        if txt then item.label.Text = txt end
+    end
+    if activeTab then
+        panelTitle.Text = TRANSLATIONS[lang][activeTab.panelTitleKey]
+        panelSubtitle.Text = TRANSLATIONS[lang][activeTab.panelSubKey]
+    end
+    searchInput.PlaceholderText = TRANSLATIONS[lang].search
+    filterTabs(searchInput.Text)
+end
+
+enBtn.MouseButton1Click:Connect(function()
+    setLanguage("EN")
+    TweenService:Create(enBtn, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(60, 40, 20) }):Play()
+    TweenService:Create(tvBtn, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(180, 120, 40) }):Play()
+end)
+tvBtn.MouseButton1Click:Connect(function()
+    setLanguage("TV")
+    TweenService:Create(tvBtn, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(60, 40, 20) }):Play()
+    TweenService:Create(enBtn, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(180, 120, 40) }):Play()
+end)
+
+-- MIN/CLOSE
+local isMinimized = false
+local originalSize = UDim2.new(0, MENU_W, 0, MENU_H)
+local originalPos = UDim2.new(0.5, -MENU_W/2, 0.5, -MENU_H/2)
+local function setMenuElementsVisible(v)
+    sidebar.Visible = v
+    contentArea.Visible = v
+    stage.Visible = v
+end
+
+minBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        setMenuElementsVisible(false)
+        TweenService:Create(main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, MENU_W, 0, TOP_H),
+            Position = UDim2.new(0.5, -MENU_W/2, 0.15, 0),
+        }):Play()
+        minBtn.Text = "▲"
+    else
+        TweenService:Create(main, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = originalSize,
+            Position = originalPos,
+        }):Play()
+        minBtn.Text = "−"
+        task.wait(0.2)
+        setMenuElementsVisible(true)
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+        Size = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        BackgroundTransparency = 1,
+    }):Play()
+    task.wait(0.3)
+    screenGui:Destroy()
+end)
+
+-- XUẤT HIỆN
+main.Size = UDim2.new(0, 0, 0, 0)
+main.Position = UDim2.new(0.5, 0, 0.5, 0)
+main.BackgroundTransparency = 1
+
+TweenService:Create(main, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    Size = originalSize,
+    Position = originalPos,
+    BackgroundTransparency = 0,
+}):Play()
+
+-- PHÍM K
+local visible = true
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.K then
+        visible = not visible
+        main.Visible = visible
+    end
+end)
+
+print("🍪 OREO HUB v16 đã load! Nhấn K để ẩn/hiện.")
+print("🎯 Aimbot: FOV circle + max distance, chọn địch gần nhất")
+print("📷 Camera: bỏ lock position, chỉ reset CameraOffset + Neck.C0")
